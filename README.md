@@ -1,4 +1,4 @@
-# Telegram User Counter Bot - Production Ready
+# Telegram User Counter Bot
 
 A scalable Telegram bot that tracks user registrations and notifies an admin of milestone achievements. Designed to handle millions of concurrent users with a production-grade architecture.
 
