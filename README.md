@@ -247,4 +247,4 @@ For issues or questions:
 - [ ] Implement Prometheus/Grafana monitoring
 - [ ] Add health check endpoints
 - [ ] Support for multiple admin notifications
-- [ ] **Note**: We can fix/add more later as the bot grows.
+
