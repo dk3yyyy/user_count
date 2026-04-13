@@ -242,4 +242,9 @@ For issues or questions:
 1. Check logs for error messages
 2. Verify environment variables are set correctly
 3. Ensure database and Redis are running
-4. Check Telegram API status
+## Future Improvements
+
+- [ ] Implement Prometheus/Grafana monitoring
+- [ ] Add health check endpoints
+- [ ] Support for multiple admin notifications
+- [ ] **Note**: We can fix/add more later as the bot grows.
