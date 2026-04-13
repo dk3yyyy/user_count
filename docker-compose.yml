@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_ID=${ADMIN_ID}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/telegram_bot
+      - REDIS_URL=redis://redis:6379/0
+      - NOTIFICATION_INTERVAL=500
+      - RATE_LIMIT_REQUESTS=100
+      - RATE_LIMIT_SECONDS=60
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    networks:
+      - bot-network
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-botuser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-botpassword}
+      - POSTGRES_DB=telegram_bot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - bot-network
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - bot-network
+
+volumes:
+  postgres_data:
+
+networks:
+  bot-network:
+    driver: bridge
