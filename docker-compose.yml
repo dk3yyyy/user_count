@@ -1,29 +1,43 @@
-version: '3.8'
-
 services:
   bot:
     build: .
+    init: true
     environment:
-      - BOT_TOKEN=${BOT_TOKEN}
-      - ADMIN_ID=${ADMIN_ID}
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/telegram_bot
-      - REDIS_URL=redis://redis:6379/0
-      - NOTIFICATION_INTERVAL=500
-      - RATE_LIMIT_REQUESTS=100
-      - RATE_LIMIT_SECONDS=60
+      BOT_TOKEN: "${BOT_TOKEN:?BOT_TOKEN must be set}"
+      ADMIN_ID: "${ADMIN_ID:?ADMIN_ID must be set}"
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-botuser}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/telegram_bot"
+      REDIS_URL: "redis://:${REDIS_PASSWORD_URLENCODED:?REDIS_PASSWORD_URLENCODED must be set}@redis:6379/0"
+      NOTIFICATION_INTERVAL: "${NOTIFICATION_INTERVAL:-500}"
+      RATE_LIMIT_REQUESTS: "${RATE_LIMIT_REQUESTS:-100}"
+      RATE_LIMIT_SECONDS: "${RATE_LIMIT_SECONDS:-60}"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       - bot-network
 
   postgres:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-botuser}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-botpassword}
-      - POSTGRES_DB=telegram_bot
+      POSTGRES_USER: "${POSTGRES_USER:-botuser}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
+      POSTGRES_DB: telegram_bot
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -32,12 +46,25 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: ["/bin/sh", "/usr/local/bin/redis-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$${REDIS_PASSWORD}\" redis-cli --no-auth-warning ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}"
+    volumes:
+      - ./docker/redis-entrypoint.sh:/usr/local/bin/redis-entrypoint.sh:ro
+      - redis_data:/data
     restart: unless-stopped
     networks:
       - bot-network
 
 volumes:
   postgres_data:
+  redis_data:
 
 networks:
   bot-network:

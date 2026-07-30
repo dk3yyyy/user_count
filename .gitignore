@@ -53,11 +53,10 @@ ENV/
 *.log
 logs/
 
-# Docker
-.dockerignore
-
-# Testing
+# Testing and static analysis
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 
