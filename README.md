@@ -1,250 +1,209 @@
-# Telegram User Counter Bot
+# 👥 Telegram User Counter Bot
 
-A scalable Telegram bot that tracks user registrations and notifies an admin of milestone achievements. Designed to handle millions of concurrent users with a production-grade architecture.
+A small async Telegram bot that registers unique users, reports counts to an admin, and sends durable milestone notifications.
 
-## Features
+The project favors verifiable behavior over benchmark claims: it has automated tests and CI, but it has **not** been load-tested for a specific throughput or user count.
 
-- ✅ **Scalable**: Async/await architecture with connection pooling
-- ✅ **Database**: PostgreSQL support for storing millions of users
-- ✅ **Caching**: Redis for performance and rate limiting
-- ✅ **Rate Limiting**: Per-user rate limiting to prevent abuse
-- ✅ **Docker**: Ready for containerized deployment
-- ✅ **Logging**: Comprehensive logging for monitoring
-- ✅ **Commands**: `/start`, `/stats`, `/help`
+## ✨ What it does
 
-## Quick Start
+- Registers each Telegram user once with `/start`
+- Returns the current unique-user count
+- Sends admin notifications for every reached milestone
+- Persists pending notifications so transient Telegram failures can be retried
+- Restricts `/stats` to the configured admin
+- Uses Redis for optional rate limiting and 60-second stats caching
+- Supports SQLite for local use and PostgreSQL through Docker Compose
+- Runs the application container as an unprivileged user on a read-only filesystem
 
-### Local Development (SQLite)
+## Commands
 
-1. **Clone and setup:**
-   ```bash
-   cd user_count
-   cp .env.example .env
-   ```
+| Command | Access | Behavior |
+|---|---|---|
+| `/start` | Everyone | Register once or show the current count |
+| `/stats` | Admin only | Show total users and the most recently delivered milestone |
+| `/help` | Everyone | Show available commands |
 
-2. **Edit `.env` with your credentials:**
-   ```
-   BOT_TOKEN=your_token_here
-   ADMIN_ID=your_admin_id_here
-   ```
+## 🚀 Local setup
 
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+Requirements: Python 3.11 or newer.
 
-4. **Run:**
-   ```bash
-   python main.py
-   ```
-
-### Production (Docker + PostgreSQL + Redis)
-
-1. **Setup `.env`:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your credentials
-   ```
-
-2. **Deploy:**
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **Monitor logs:**
-   ```bash
-   docker-compose logs -f bot
-   ```
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BOT_TOKEN` | Required | Telegram bot token |
-| `ADMIN_ID` | Required | Admin user ID for notifications |
-| `DATABASE_URL` | `sqlite+aiosqlite:///users.db` | Database connection string |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection string |
-| `NOTIFICATION_INTERVAL` | `500` | Notify admin every N users |
-| `RATE_LIMIT_REQUESTS` | `100` | Max requests per user |
-| `RATE_LIMIT_SECONDS` | `60` | Rate limit window |
-
-### Database Options
-
-**SQLite (Local Development):**
+```bash
+git clone https://github.com/dk3yyyy/user_count.git
+cd user_count
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
 ```
+
+Set at least these values in `.env`:
+
+```dotenv
+BOT_TOKEN=replace_with_botfather_token
+ADMIN_ID=replace_with_numeric_telegram_user_id
+```
+
+The default database is local SQLite. Redis is optional; leave `REDIS_URL` unset to run without distributed rate limiting and stats caching.
+
+```bash
+python main.py
+```
+
+Startup validates all required and numeric settings. Invalid configuration exits before polling begins.
+
+## 🐳 Docker Compose
+
+Compose runs one bot poller with PostgreSQL and authenticated Redis.
+
+```bash
+cp .env.example .env
+```
+
+Replace the Telegram credentials and service passwords in `.env`. Set each
+`*_PASSWORD_URLENCODED` value to the percent-encoded form of its matching raw
+password; this keeps characters such as `@`, `:`, `/`, and `#` valid inside
+connection URLs. For example:
+
+```bash
+python -c "from urllib.parse import quote; print(quote('your password', safe=''))"
+```
+
+Then validate and start the stack:
+
+```bash
+docker compose config --quiet
+docker compose up --build -d
+docker compose logs -f bot
+```
+
+PostgreSQL and Redis have health checks. The bot starts only after both dependencies report healthy.
+
+Stop the stack without deleting database data:
+
+```bash
+docker compose down
+```
+
+To also delete PostgreSQL and Redis volumes, explicitly run `docker compose down -v`. This is destructive.
+
+## ⚙️ Configuration
+
+| Variable | Default | Required | Purpose |
+|---|---:|:---:|---|
+| `BOT_TOKEN` | — | Yes | Token issued by BotFather |
+| `ADMIN_ID` | — | Yes | Positive numeric Telegram user ID |
+| `DATABASE_URL` | `sqlite+aiosqlite:///users.db` | No | SQLAlchemy async database URL |
+| `REDIS_URL` | unset | No | Redis URL for rate limiting and stats caching |
+| `NOTIFICATION_INTERVAL` | `500` | No | Positive milestone interval |
+| `RATE_LIMIT_REQUESTS` | `100` | No | Positive requests allowed per window |
+| `RATE_LIMIT_SECONDS` | `60` | No | Positive rate-limit window in seconds |
+| `POSTGRES_USER` | `botuser` | Compose | PostgreSQL user |
+| `POSTGRES_PASSWORD` | — | Compose | PostgreSQL password; no insecure default |
+| `POSTGRES_PASSWORD_URLENCODED` | — | Compose | Percent-encoded form of the PostgreSQL password for the connection URL |
+| `REDIS_PASSWORD` | — | Compose | Redis password; no insecure default |
+| `REDIS_PASSWORD_URLENCODED` | — | Compose | Percent-encoded form of the Redis password for the connection URL |
+
+Examples:
+
+```dotenv
+# Local SQLite
 DATABASE_URL=sqlite+aiosqlite:///users.db
+
+# PostgreSQL
+DATABASE_URL=postgresql+asyncpg://user:password@host:5432/telegram_bot
+
+# Optional Redis
+REDIS_URL=redis://:password@host:6379/0
 ```
 
-**PostgreSQL (Production):**
-```
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/telegram_bot
-```
+Do not commit `.env` or real credentials.
 
-## Architecture
+## 🧱 Data and failure behavior
 
-### Technology Stack
-- **Language**: Python 3.11+
-- **Bot Framework**: python-telegram-bot
-- **Database**: SQLAlchemy ORM with async support
-- **Cache**: Redis
-- **Containerization**: Docker & Docker Compose
-- **Concurrency**: AsyncIO with connection pooling
+### Tables
 
-### Scalability Features
+- `users`: unique Telegram ID, display name, registration time
+- `admin_messages`: most recently delivered milestone message
+- `milestone_notifications`: durable pending/sent/superseded milestone records and attempt counts
 
-1. **Database Layer**
-   - Connection pooling (20 connections, 40 max overflow)
-   - Async database operations
-   - Efficient queries with indexed lookups
+### Registration and milestones
 
-2. **Caching Layer**
-   - Redis for stats caching
-   - Rate limiting with Redis
-   - Reduced database queries
+1. A unique user and every newly reached milestone are committed in one database transaction.
+2. Startup reconciles the current user count into any missing milestone rows before delivery.
+3. Existing `admin_messages.last_count` state is used as the upgrade baseline, preventing historical milestones from being resent when the outbox table is introduced.
+4. Pending notifications are sent in milestone order, stopping at the first failed send.
+5. A successful notification is marked sent.
+6. Stale pending rows at or below the delivered admin milestone are marked superseded instead of replacing newer state.
+7. The previous admin message is deleted only after its replacement is delivered.
 
-3. **Async I/O**
-   - Non-blocking bot message handling
-   - Proper coroutine management
-   - Connection reuse
+A Telegram send failure increments the attempt count and leaves the row pending. Pending rows are retried on application startup and after subsequent `/start` requests.
 
-4. **Monitoring**
-   - Structured logging
-   - Error handling and recovery
-   - Health checks available
+### Redis failure
 
-## API / Commands
+Redis is optional. If it is unavailable, the bot logs a warning and continues without distributed rate limiting or stats caching. Database-backed registration and milestones continue to work.
 
-### User Commands
+### Database failure
 
-- **`/start`** - Register as a user (or welcome back)
-  - Returns user count
-  - Triggers admin notification at milestones
+The bot does **not** silently fall back to another database. Startup database failures stop initialization; handler-time failures are logged and return a generic user-facing error.
 
-- **`/stats`** - View bot statistics
-  - Total user count
-  - Last milestone reached
-  - Last update time
+## 🧪 Development and verification
 
-- **`/help`** - Show available commands
+Install the exact development toolchain:
 
-## Performance Metrics
-
-Estimated capacity with proper hardware:
-
-| Component | Capacity |
-|-----------|----------|
-| Concurrent Users | 1,000,000+ |
-| Registrations/sec | 1,000+ |
-| Queries/sec | 100,000+ |
-| Cache Hit Rate | 80%+ |
-
-## Deployment Recommendations
-
-### For Scaling to Millions of Users
-
-1. **Use PostgreSQL** (not SQLite)
-2. **Set up multiple bot instances** behind a load balancer
-3. **Configure Redis Cluster** for high availability
-4. **Use Kubernetes** for orchestration
-5. **Monitor with Prometheus/Grafana**
-6. **Use RDS** (AWS) or Cloud SQL (Google) for managed PostgreSQL
-7. **Use ElastiCache** (AWS) or Memorystore (Google) for managed Redis
-
-### Kubernetes Example
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: telegram-bot
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: telegram-bot
-  template:
-    metadata:
-      labels:
-        app: telegram-bot
-    spec:
-      containers:
-      - name: bot
-        image: telegram-bot:latest
-        env:
-        - name: BOT_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: bot-secrets
-              key: token
-        - name: DATABASE_URL
-          value: postgresql+asyncpg://user:pass@postgres-service:5432/bot_db
-        - name: REDIS_URL
-          value: redis://redis-service:6379/0
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+```bash
+pip install -r requirements-dev.txt
 ```
 
-## Files
+Run the same gates used by CI:
 
-- `main.py` - Main bot code
-- `requirements.txt` - Python dependencies
-- `Dockerfile` - Container image definition
-- `docker-compose.yml` - Local deployment stack
-- `.env.example` - Environment variables template
-- `README.md` - This file
-
-## Database Schema
-
-### Users Table
-```
-id (BigInteger, PK)      - Telegram user ID
-username (String)        - User's first name
-registered_at (DateTime) - Registration timestamp
+```bash
+python -m compileall -q main.py
+ruff check .
+ruff format --check .
+mypy
+pytest -q
+bandit -q -r main.py
+pip-audit --requirement requirements.txt
 ```
 
-### Admin Messages Table
-```
-id (Integer, PK)         - Always 1 for singleton
-message_id (Integer)     - Telegram message ID
-last_count (Integer)     - Last notified user count
-last_updated (DateTime)  - Update timestamp
-```
+CI runs these checks on Python 3.11, 3.12, and 3.13. Dependabot checks Python, Docker, and GitHub Actions dependencies weekly.
 
-## Error Handling
+The test suite covers:
 
-- Database connection failures: Falls back gracefully
-- Redis unavailable: Continues with in-memory caching disabled
-- Telegram API errors: Logged and retried
-- Rate limiting: Prevents user abuse
+- `/stats` before any milestone exists
+- Required and numeric configuration validation
+- Gap-safe, idempotent milestone claims
+- Atomic registration and milestone claims
+- Startup reconciliation and legacy milestone baselines
+- Ordered delivery that stops after the first failed milestone
+- Failed notification retention and retry
+- Redis password escaping, config permissions, and argv secrecy
+- End-to-end registration and milestone delivery
+
+## 📐 Deployment boundaries
+
+- Run **one long-polling process per bot token**. Multiple `getUpdates` pollers for the same token are not a supported scaling strategy.
+- The in-process notification lock prevents duplicate sends inside one process. The durable primary key prevents duplicate milestone claims in the database.
+- Telegram delivery cannot be exactly-once: a process crash after Telegram accepts a message but before the database commit can cause a retry and duplicate message.
+- There is no bot HTTP health endpoint, Prometheus integration, or published performance benchmark.
+- For horizontal scaling, first move from long polling to a webhook architecture with centralized idempotency and distributed delivery locking, then benchmark the actual target workload.
+
+## Project files
+
+```text
+.github/workflows/ci.yml  Automated quality and security gates
+.github/dependabot.yml    Dependency update policy
+main.py                   Bot, persistence, and handlers
+tests/                    Regression and behavior tests
+requirements.txt          Runtime dependencies
+requirements-dev.txt      Test and quality dependencies
+Dockerfile                Non-root application image
+docker-compose.yml        Bot, PostgreSQL, and Redis stack
+docker/redis-entrypoint.sh Safely escaped Redis password configuration
+.env.example              Safe configuration template
+LICENSE                   MIT license
+```
 
 ## License
 
-MIT License - feel free to use for your projects
-
-## Contributing
-
-Contributions welcome! Please ensure:
-- All async functions are properly awaited
-- Database operations use connection pooling
-- Errors are logged appropriately
-- Code follows PEP 8 style guide
-
-## Support
-
-For issues or questions:
-1. Check logs for error messages
-2. Verify environment variables are set correctly
-3. Ensure database and Redis are running
-## Future Improvements
-
-- [ ] Implement Prometheus/Grafana monitoring
-- [ ] Add health check endpoints
-- [ ] Support for multiple admin notifications
-
+[MIT](LICENSE) © 2026 Joshua Nwachinemere
