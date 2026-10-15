@@ -1,6 +1,6 @@
 python-telegram-bot==22.8
-SQLAlchemy[asyncio]==2.0.51
-asyncpg==0.31.0
-python-dotenv==1.2.2
+SQLAlchemy[asyncio]==2.1.4
+asyncpg==0.32.0
+python-dotenv==1.2.4
 redis==8.1.0
 aiosqlite==0.22.1
